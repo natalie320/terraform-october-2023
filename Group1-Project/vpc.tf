@@ -63,9 +63,33 @@ resource "aws_internet_gateway" "gw" {
   }
 }
 
-#Route Table
 
-resource "aws_route_table" "rt" {
+#Elastic IP
+
+resource "aws_eip" "eip" {
+  domain = "vpc"
+
+  tags = {
+    Name = "My-EIP"
+  }
+
+}
+
+
+#NAT Gateway
+
+resource "aws_nat_gateway" "nat" {
+  allocation_id = aws_eip.eip.id
+  subnet_id     = aws_subnet.private1.id
+
+  tags = {
+    Name = "My-NAT"
+  }
+}
+
+#Route Table - public
+
+resource "aws_route_table" "rt-public" {
   vpc_id = aws_vpc.main.id
 
   route {
@@ -74,32 +98,47 @@ resource "aws_route_table" "rt" {
   }
 
   tags = {
-    Name = "RT"
+    Name = "RT-public"
+  }
+}
+
+#Route Table - private
+
+resource "aws_route_table" "rt-private" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat.id
+  }
+
+  tags = {
+    Name = "RT-private"
   }
 }
 
 #Route table association - attaching subnets to an internet gateway
 resource "aws_route_table_association" "a" {
   subnet_id      = aws_subnet.public1.id
-  route_table_id = aws_route_table.rt.id
+  route_table_id = aws_route_table.rt-public.id
 }
 
 resource "aws_route_table_association" "b" {
   subnet_id      = aws_subnet.public2.id
-  route_table_id = aws_route_table.rt.id
+  route_table_id = aws_route_table.rt-public.id
 }
 
 resource "aws_route_table_association" "c" {
   subnet_id      = aws_subnet.private1.id
-  route_table_id = aws_route_table.rt.id
+  route_table_id = aws_route_table.rt-private.id
 }
 
 resource "aws_route_table_association" "d" {
   subnet_id      = aws_subnet.private2.id
-  route_table_id = aws_route_table.rt.id
+  route_table_id = aws_route_table.rt-private.id
 }
 
-#Security group for EC2 instance to allow traffic on port 22 and port 80
+#Security group for EC2 instance to allow traffic on port 22, port 80 and port 3306
 
 resource "aws_security_group" "allow_tls" {
   name        = "allow_tls"
@@ -130,24 +169,5 @@ ingress {
   }
   tags = {
     Name = "Group-1"
-  }
-}
-
-#Security group for Database to allow traffic on port 3306
-
-resource "aws_security_group" "rds_sg" {
-  name        = "rds-sg"
-  description = "Security group for RDS instance"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    from_port   = 3306
-    to_port     = 3306
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.3.0/24"]
-  }
-
-  tags = {
-    Name = "Group-1 RDS SG"
   }
 }
