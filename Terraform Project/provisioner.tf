@@ -18,10 +18,15 @@ resource "null_resource" "cluster" {
         "sudo yum install httpd -y", 
         "sudo systemctl start httpd", 
         "sudo systemctl enable httpd",
+        "sudo systemctl status httpd",
+        "sudo systemctl status mariadb",
+        "sudo mysql_secure_installation",
+
         "wget https://wordpress.org/latest.tar.gz",
         "tar xvf latest.tar.gz",
-        "sudo chown -R apache:apache /var/www/html/", 
-        "sudo cp -R wordpress/* /var/www/html/"
+        "sudo cp -R wordpress/* /var/www/html/",
+        "sudo chown -R apache:apache /var/www/html/",
+        "sudo systemctl restart httpd"
     ]
 }
 }

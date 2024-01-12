@@ -26,8 +26,6 @@ resource "aws_key_pair" "deployer" {
 
 }
 resource "aws_instance" "web" {
- depends_on = [aws_internet_gateway.gw]
-
  ami                         = data.aws_ami.amazon-linux-2.id
  associate_public_ip_address = true
  instance_type               = "t2.micro"
@@ -42,7 +40,7 @@ resource "aws_instance" "web" {
   }
 }
 
-#RDS SG
+#RDS Subnet Group
 
 resource "aws_db_subnet_group" "rds_subnet_group" {
     name = "rds_subnet_group"
@@ -51,7 +49,9 @@ resource "aws_db_subnet_group" "rds_subnet_group" {
 
 #RDS INSTANCE
 resource "aws_db_instance" "my-db" {
+  identifier           = "my-db"
   allocated_storage    = 20
+  storage_type          = "gp2"
   db_name              = "mydb"
   engine               = "mysql"
   engine_version       = "5.7"
@@ -79,9 +79,14 @@ resource "aws_security_group" "rds_sg" {
     from_port   = 3306
     to_port     = 3306
     protocol    = "tcp"
-    cidr_blocks = ["10.0.3.0/24", "10.0.4.0/24"]
+    cidr_blocks = ["0.0.0.0/0"]
   }
-
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
   tags = {
     Name = "Group-1 RDS SG"
   }

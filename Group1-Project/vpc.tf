@@ -63,6 +63,20 @@ resource "aws_internet_gateway" "gw" {
   }
 }
 
+#Route Table - public
+
+resource "aws_route_table" "rt-public" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.gw.id
+  }
+
+  tags = {
+    Name = "RT-public"
+  }
+}
 
 #Elastic IP
 
@@ -84,21 +98,6 @@ resource "aws_nat_gateway" "nat" {
 
   tags = {
     Name = "My-NAT"
-  }
-}
-
-#Route Table - public
-
-resource "aws_route_table" "rt-public" {
-  vpc_id = aws_vpc.main.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.gw.id
-  }
-
-  tags = {
-    Name = "RT-public"
   }
 }
 
@@ -153,12 +152,20 @@ resource "aws_security_group" "allow_tls" {
     cidr_blocks      = ["0.0.0.0/0"]
   }
 
-ingress {
+  ingress {
     description      = "TLS from VPC"
     from_port        = 80
     to_port          = 80
     protocol         = "tcp"
     cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "TLS from VPC"
+    from_port   = 3306
+    to_port     = 3306
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
