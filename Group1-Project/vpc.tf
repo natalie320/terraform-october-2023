@@ -1,180 +1,193 @@
-#VPC
+provider "aws" {
+  region = var.region
+}
 
-resource "aws_vpc" "main" {
-  cidr_block       = "10.0.0.0/16" 
-  enable_dns_support = true
-  enable_dns_hostnames = true
+data "aws_availability_zones" "azs" {
+
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.vpc.id
 
   tags = {
-    Name = "Group-1"
+    Name = "${var.stack}-igw"
   }
 }
 
-#Subnets - 2 public ones and 2 private ones
+resource "aws_nat_gateway" "nat" {
+  subnet_id     = aws_subnet.public1.id
+  allocation_id = aws_eip.eip.id
+
+  tags = {
+    Name = "${var.stack}-nat"
+  }
+}
+resource "aws_vpc" "vpc" {
+  cidr_block = var.vpc_cidr
+  enable_dns_hostnames = true
+
+  tags = {
+    Name = "${var.stack}-vpc"
+  }
+}
+
+resource "aws_eip" "eip" {
+  # vpc = true
+  domain = "vpc"
+
+  tags = {
+    Name = "${var.stack}-nat-ip"
+  }
+}
+
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_nat_gateway.nat.id
+  }
+
+  tags = {
+    Name = "${var.stack}-private"
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+
+  tags = {
+    Name = "${var.stack}-public"
+  }
+}
+
+resource "aws_route_table_association" "private1" {
+  route_table_id = aws_route_table.private.id
+
+  subnet_id = aws_subnet.private1.id
+}
+
+resource "aws_route_table_association" "public1" {
+  route_table_id = aws_route_table.public.id
+
+  subnet_id = aws_subnet.public1.id
+}
+
+resource "aws_route_table_association" "public2" {
+  route_table_id = aws_route_table.public.id
+  subnet_id      = aws_subnet.public2.id
+}
 
 resource "aws_subnet" "public1" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.1.0/24"
-  availability_zone = "us-east-1a" 
+  vpc_id            = aws_vpc.vpc.id
+  cidr_block        = var.public1_cidr
+  availability_zone = data.aws_availability_zones.azs.names[0]
   map_public_ip_on_launch = true
+
   tags = {
-    Name = "Public1"
+    Name = "${var.stack}-public-1"
   }
 }
 
 resource "aws_subnet" "public2" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.2.0/24"
-  availability_zone = "us-east-1b" 
+  vpc_id     = aws_vpc.vpc.id
+  cidr_block = var.public2_cidr
+  availability_zone = data.aws_availability_zones.azs.names[1]
   map_public_ip_on_launch = true
+
   tags = {
-    Name = "Public2"
+    Name = "${var.stack}-public-2"
   }
 }
 
 resource "aws_subnet" "private1" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.3.0/24"
-  availability_zone = "us-east-1c" 
-  map_public_ip_on_launch = false
-  tags = {
-    Name = "Private1"
-  }
-}
+  vpc_id     = aws_vpc.vpc.id
+  cidr_block = var.private1_cidr
 
-resource "aws_subnet" "private2" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.4.0/24"
-  availability_zone = "us-east-1d" 
-  map_public_ip_on_launch = false
-  tags = {
-    Name = "Private2"
-  }
-}
-
-
-#Internet Gateway
-
-resource "aws_internet_gateway" "gw" {
-  vpc_id = aws_vpc.main.id
+  availability_zone = data.aws_availability_zones.azs.names[2]
 
   tags = {
-    Name = "my-igw"
+    Name = "${var.stack}-private-1"
   }
 }
 
-#Route Table - public
-
-resource "aws_route_table" "rt-public" {
-  vpc_id = aws_vpc.main.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.gw.id
-  }
+resource "aws_db_subnet_group" "mysql" {
+  name       = "${var.stack}-subngroup"
+  subnet_ids = [aws_subnet.private1.id, aws_subnet.public1.id, aws_subnet.public2.id]
 
   tags = {
-    Name = "RT-public"
+    Name = "${var.stack}-subnetGroup"
   }
+
 }
-
-#Elastic IP
-
-resource "aws_eip" "eip" {
-  domain = "vpc"
-
+resource aws_security_group "mysql" {
+  name        = "${var.stack}-DBSG"
+  description = "managed by terrafrom for db servers"
+  vpc_id      = aws_vpc.vpc.id
   tags = {
-    Name = "My-EIP"
-  }
-
-}
-
-
-#NAT Gateway
-
-resource "aws_nat_gateway" "nat" {
-  allocation_id = aws_eip.eip.id
-  subnet_id     = aws_subnet.private1.id
-
-  tags = {
-    Name = "My-NAT"
-  }
-}
-
-#Route Table - private
-
-resource "aws_route_table" "rt-private" {
-  vpc_id = aws_vpc.main.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.nat.id
-  }
-
-  tags = {
-    Name = "RT-private"
-  }
-}
-
-#Route table association - attaching subnets to an internet gateway
-resource "aws_route_table_association" "a" {
-  subnet_id      = aws_subnet.public1.id
-  route_table_id = aws_route_table.rt-public.id
-}
-
-resource "aws_route_table_association" "b" {
-  subnet_id      = aws_subnet.public2.id
-  route_table_id = aws_route_table.rt-public.id
-}
-
-resource "aws_route_table_association" "c" {
-  subnet_id      = aws_subnet.private1.id
-  route_table_id = aws_route_table.rt-private.id
-}
-
-resource "aws_route_table_association" "d" {
-  subnet_id      = aws_subnet.private2.id
-  route_table_id = aws_route_table.rt-private.id
-}
-
-#Security group for EC2 instance to allow traffic on port 22, port 80 and port 3306
-
-resource "aws_security_group" "allow_tls" {
-  name        = "allow_tls"
-  description = "Allow TLS inbound traffic"
-  vpc_id = aws_vpc.main.id
-
-  ingress {
-    description      = "TLS from VPC"
-    from_port        = 22
-    to_port          = 22
-    protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
+    Name = "${var.stack}-DBSG"
   }
 
   ingress {
-    description      = "TLS from VPC"
-    from_port        = 80
-    to_port          = 80
-    protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
+    protocol        = "tcp"
+    from_port       = 3306
+    to_port         = 3306
+    security_groups = ["${aws_security_group.web.id}"] 
+   }
+
+  egress {
+    protocol    = -1
+    from_port   = 0
+    to_port     = 0
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource aws_security_group "web" {
+  name        = "${var.stack}-webSG"
+  description = "This is for ${var.stack}s web servers security group"
+  vpc_id      = "${aws_vpc.vpc.id}"
+
+  tags = {
+    Name = "${var.stack}-webSG"
   }
 
   ingress {
-    description = "TLS from VPC"
-    from_port   = 3306
-    to_port     = 3306
     protocol    = "tcp"
+    from_port   = 22
+    to_port     = 22
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
+  ingress {
+    protocol    = "icmp"
+    from_port   = -1
+    to_port     = -1
+    cidr_blocks = [aws_vpc.vpc.cidr_block]
   }
-  tags = {
-    Name = "Group-1"
+
+  ingress {
+    protocol    = "tcp"
+    from_port   = 80
+    to_port     = 80
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    protocol        = "tcp"
+    from_port       = 3306
+    to_port         = 3306
+   cidr_blocks = ["0.0.0.0/0"]
+   }
+
+  egress {
+    protocol    = -1
+    from_port   = 0
+    to_port     = 0
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
